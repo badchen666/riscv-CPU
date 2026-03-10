@@ -11,10 +11,11 @@ module  instr_ram (
 
  (* ram_style = "block" *)reg [31:0] ram [1023:0];
 
-    // 仿真初始化：直接从 hex 文件预加载，避免 doutb 读出 X
-    // xsim 工作目录为 cpu_test.sim/sim_1/behav/xsim/
-    initial begin
-        $readmemh("../../../../src/imem.hex", ram);
+integer i;
+initial begin
+        for (i = 0; i < 1024; i = i + 1) begin
+            ram[i] = 32'h00000013;
+        end
     end
 
 always @(posedge clk)  //写
