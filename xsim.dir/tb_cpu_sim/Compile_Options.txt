@@ -1,0 +1,1 @@
+"work.tb_cpu" -s "tb_cpu_sim" -debug "all" -timescale "1ns/1ps" 

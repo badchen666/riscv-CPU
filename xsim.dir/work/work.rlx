@@ -1,0 +1,16 @@
+0.6
+2018.3
+Dec  7 2018
+00:33:28
+D:/WorkSpace/CPU/src/alu.v,1772616592,verilog,,D:/WorkSpace/CPU/src/control.v,D:/WorkSpace/CPU/src/defines.v,alu,,,,,,,,
+D:/WorkSpace/CPU/src/control.v,1772616592,verilog,,D:/WorkSpace/CPU/src/cpu_top.v,D:/WorkSpace/CPU/src/defines.v,control,,,,,,,,
+D:/WorkSpace/CPU/src/cpu_top.v,1773133602,verilog,,D:/WorkSpace/CPU/src/dmem.v,D:/WorkSpace/CPU/src/defines.v,cpu_top,,,,,,,,
+D:/WorkSpace/CPU/src/defines.v,1772616592,verilog,,,,,,,,,,,,
+D:/WorkSpace/CPU/src/dmem.v,1772787838,verilog,,D:/WorkSpace/CPU/src/forward_unit.v,D:/WorkSpace/CPU/src/defines.v,dmem,,,,,,,,
+D:/WorkSpace/CPU/src/forward_unit.v,1772616592,verilog,,D:/WorkSpace/CPU/src/hazard_unit.v,D:/WorkSpace/CPU/src/defines.v,forward_unit,,,,,,,,
+D:/WorkSpace/CPU/src/hazard_unit.v,1773133305,verilog,,D:/WorkSpace/CPU/src/imem.v,D:/WorkSpace/CPU/src/defines.v,hazard_unit,,,,,,,,
+D:/WorkSpace/CPU/src/imem.v,1773130893,verilog,,D:/WorkSpace/CPU/src/imm_gen.v,D:/WorkSpace/CPU/src/defines.v,imem,,,,,,,,
+D:/WorkSpace/CPU/src/imm_gen.v,1772616592,verilog,,D:/WorkSpace/CPU/src/instr_ram.v,D:/WorkSpace/CPU/src/defines.v,imm_gen,,,,,,,,
+D:/WorkSpace/CPU/src/instr_ram.v,1773121047,verilog,,D:/WorkSpace/CPU/src/regfile.v,,instr_ram,,,,,,,,
+D:/WorkSpace/CPU/src/regfile.v,1772789955,verilog,,D:/WorkSpace/CPU/src/tb_cpu.v,D:/WorkSpace/CPU/src/defines.v,regfile,,,,,,,,
+D:/WorkSpace/CPU/src/tb_cpu.v,1773132640,verilog,,,D:/WorkSpace/CPU/src/defines.v,tb_cpu,,,,,,,,

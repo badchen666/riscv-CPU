@@ -151,12 +151,10 @@ module tb_cpu;
         repeat(150) begin
             @(posedge clk);
             #1; // 等待组合逻辑稳定
-            $display("T=%0t | PC=%08X INSTR=%08X | WB: wr=%b rd=x%0d data=%08X | ALU=%08X | br=%b tgt=%08X | stall=%b flush=%b",
+            $display("T=%0t | PC=%08X INSTR=%08X | stall=%b flush=%b | WB: wr=%b rd=x%0d data=%0d",
                 $time, dbg_pc, dbg_instr,
-                dbg_wb_reg_write, dbg_wb_rd, dbg_wb_wdata,
-                dbg_ex_alu_result,
-                dbg_ex_branch, dbg_ex_pc_target,
-                dbg_stall, dbg_flush);
+                dbg_stall, dbg_flush,
+                dbg_wb_reg_write, dbg_wb_rd, dbg_wb_wdata);
         end
 
         // ---- 结果验证 (通过内部层次路径读取寄存器) ----

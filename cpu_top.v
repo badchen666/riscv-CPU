@@ -61,13 +61,16 @@ module cpu_top (
 
     // PC 寄存器 (stall 时保持, 但 branch 优先于 stall)
     wire stall;
+    wire stall_next;  // Load-Use stall 提前预判 (定义在 ID 阶段，此处前置声明)
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             pc_reg <= 32'b0;
         else if (mem_take_branch)
             pc_reg <= mem_branch_target;   // 跳转优先
-        else if (!stall)
+        else if (!stall && !stall_next)
             pc_reg <= pc_next;
+        // stall || stall_next 时 pc_reg 保持
     end
 
     // BRAM 同步读补偿：pc_reg_d1 是上一拍送给 BRAM 的地址
@@ -190,6 +193,15 @@ module cpu_top (
         .rd     (wb_rd),  // 写寄存器编号
         .wdata  (wb_wdata)  // 写寄存器数据
     );
+
+    // Load-Use stall 提前预判:
+    // 由于 BRAM 同步读延迟, 经典 stall (EX vs ID) 在 lw 进入 EX 的同一个 posedge 才生效,
+    // 但此时 PC 已经以 stall=0(旧值) 更新了 (多走了一步).
+    // 解法: 在 ID 阶段预判 "当前 ID 的 LOAD 指令会与 IF 阶段 (BRAM 输出) 的下一条指令冲突",
+    // 用 stall_next 提前 hold PC. IF/ID 和 ID/EX 仍由经典 stall (EX vs ID) 控制.
+    assign stall_next = id_mem_read &&
+                        ((id_rd == if_instr[19:15]) || (id_rd == if_instr[24:20])) &&
+                        (id_rd != 5'b0);
 
     // 冒险检测
     wire       flush_idex_hazard;   // Load-Use 冒险时冲刷 ID/EX

@@ -20,12 +20,12 @@ module imem (
     input wire        instr_ena,
     input wire        instr_wea
 );
-    wire [9:0] bram_addrb;
+    wire [31:0] bram_addrb;
     wire bram_enb;
     wire [31:0] bram_doutb;
     
     // 地址转换：字节地址 → 字地址
-    assign bram_addrb = addr[11:2];
+    assign bram_addrb = {22'b0,addr[11:2]};
     assign bram_enb = 1'b1;  // 始终使能 Port B 读取指令
     assign instr = bram_doutb;
 
