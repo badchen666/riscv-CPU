@@ -15,14 +15,11 @@ module cpu_top (
     input wire clk,
     input wire rst_n,
 
-    // ---- BRAM Port B (指令存储器, 在 Block Design 中连线) ----
-    output wire [9:0]  imem_bram_addrb,
-    output wire        imem_bram_clkb,
-    output wire        imem_bram_enb,
-    output wire        imem_bram_rstb,
-    output wire [3:0]  imem_bram_web,
-    output wire [31:0] imem_bram_dinb,
-    input  wire [31:0] imem_bram_doutb,
+    // ---- BRAM Port B AXI-LITE ---- //
+    input wire [31:0] instr_addra,
+    input wire [31:0] instr_data,
+    input wire        instr_ena,
+    input wire        instr_wea,
 
     // ---- ILA 调试观测端口 (连接到 Block Design 中的 ILA IP 核) ----
     // IF 阶段
@@ -38,7 +35,13 @@ module cpu_top (
     output wire [31:0] dbg_ex_pc_target, // 跳转目标地址
     // 流水线控制
     output wire        dbg_stall,        // 流水线停顿
-    output wire        dbg_flush         // 流水线冲刷
+    output wire        dbg_flush,        // 流水线冲刷
+
+    // 通用寄存器观测
+    output wire [31:0] dbg_reg_x2,       // x2 = sum
+    output wire [31:0] dbg_reg_x3,       // x3 = lw 读回
+    output wire [31:0] dbg_reg_x4,       // x4 = MEM-EX 前递
+    output wire [31:0] dbg_reg_x7        // x7 = 结束标志
 );
 
 // ============================================================
@@ -69,14 +72,17 @@ module cpu_top (
 
     // BRAM 同步读补偿：pc_reg_d1 是上一拍送给 BRAM 的地址
     // BRAM 在当前拍输出的指令对应的正是 pc_reg_d1
+    // 注意：stall 期间 pc_reg 保持不变，但 BRAM 仍然以 pc_reg 为地址在读取。
+    //       因此 pc_reg_d1 必须始终跟踪 pc_reg（无论是否 stall），
+    //       否则 stall 结束后 pc_reg_d1 会比 BRAM 输出落后一拍，导致 PC 与指令错位。
     reg [31:0] pc_reg_d1;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             pc_reg_d1 <= 32'b0;
         else if (mem_take_branch)
-            pc_reg_d1 <= 32'b0;       // 跳转时清零 (对应指令将被 flush)
-        else if (!stall)
-            pc_reg_d1 <= pc_reg;  // 延迟一拍，与 BRAM 输出对齐
+            pc_reg_d1 <= mem_branch_target;  // 跳转时设为目标地址，下一拍 IF/ID 用它作为 PC
+        else
+            pc_reg_d1 <= pc_reg;  // 始终跟踪 pc_reg，与 BRAM 输出对齐（stall 时 pc_reg 不变，赋值等效 hold）
     end
 
 
@@ -84,14 +90,11 @@ module cpu_top (
         .clk        (clk),
         .addr       (pc_reg),
         .instr      (if_instr),
-        // BRAM Port B — 在 Block Design 中连到 BRAM IP 核
-        .bram_addrb (imem_bram_addrb),
-        .bram_clkb  (imem_bram_clkb),
-        .bram_enb   (imem_bram_enb),
-        .bram_rstb  (imem_bram_rstb),
-        .bram_web   (imem_bram_web),
-        .bram_dinb  (imem_bram_dinb),
-        .bram_doutb (imem_bram_doutb)
+        // BRAM Port B
+        .instr_addra(instr_addra),
+        .instr_data (instr_data),
+        .instr_ena  (instr_ena),
+        .instr_wea  (instr_wea)
     );
 
 // ============================================================
@@ -100,7 +103,17 @@ module cpu_top (
     reg [31:0] ifid_pc;
     reg [31:0] ifid_instr;
 
-    wire flush_ifid = mem_take_branch;  // 控制冒险时冲刷 (使用寄存后的分支信号)
+    // BRAM 同步读延迟补偿：branch 后需要额外 flush 一拍 IF/ID
+    // 因为 BRAM 输出比地址晚一拍，branch 后第一拍 BRAM 输出的仍是旧指令
+    reg flush_ifid_d1;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            flush_ifid_d1 <= 1'b0;
+        else
+            flush_ifid_d1 <= mem_take_branch;
+    end
+
+    wire flush_ifid = mem_take_branch || flush_ifid_d1;  // 延长 flush 一拍
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n || flush_ifid) begin
@@ -367,7 +380,7 @@ module cpu_top (
     reg [31:0] exmem_rdata2;
     reg [4:0]  exmem_rd;
     reg        exmem_reg_write;
-    reg [1:0]  exmem_wb_sel;
+    reg [1:0]  exmem_wb_sel;  // 写回数据选择：0=ALU结果, 1=访存数据, 2=PC+4 (JAL/JALR)
     reg        exmem_mem_read;
     reg        exmem_mem_write;
     reg [2:0]  exmem_mem_funct3;
@@ -438,6 +451,49 @@ module cpu_top (
     );
 
 // ============================================================
+// ===============  Store-to-Load Forwarding  =================
+// ============================================================
+    // 场景：sw 在 MEM 阶段写 BRAM, lw 在同一拍 EX 阶段送读地址给 BRAM。
+    //       由于 BRAM READ_FIRST，下一拍 lw 读出的是旧值。
+    // 解法：寄存 MEM 阶段的写信息（地址/数据/使能），下一拍与 BRAM 读出结果比较。
+    //       如果地址匹配，用寄存的写数据替换 BRAM 读出值。
+    //
+    // 时序对齐：
+    //   Cycle N  : sw 在 MEM 写入 → 寄存写信息; lw 在 EX 送读地址
+    //   Cycle N+1: BRAM 输出旧值(mem_rdata) → 检测到地址匹配 → 用寄存的写数据替换
+    reg [31:0] prev_wr_addr;
+    reg [31:0] prev_wr_data;
+    reg        prev_wr_en;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            prev_wr_addr <= 32'b0;
+            prev_wr_data <= 32'b0;
+            prev_wr_en   <= 1'b0;
+        end else begin
+            prev_wr_addr <= exmem_alu_result;  // MEM 阶段的写地址
+            prev_wr_data <= exmem_rdata2;      // MEM 阶段的写数据
+            prev_wr_en   <= exmem_mem_write;   // MEM 阶段是否在写
+        end
+    end
+
+    // 当前拍 BRAM 读出的结果对应的读地址也需要寄存（来自上一拍 EX 的 dmem 读请求）
+    reg [31:0] mem_rd_addr_r;
+    reg        mem_rd_en_r;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            mem_rd_addr_r <= 32'b0;
+            mem_rd_en_r   <= 1'b0;
+        end else begin
+            mem_rd_addr_r <= ex_alu_result;
+            mem_rd_en_r   <= idex_mem_read;
+        end
+    end
+
+    wire mem_st2ld_fwd = prev_wr_en && mem_rd_en_r &&
+                         (prev_wr_addr[31:2] == mem_rd_addr_r[31:2]);
+    wire [31:0] mem_rdata_fwd = mem_st2ld_fwd ? prev_wr_data : mem_rdata;
+
+// ============================================================
 // ===============  MEM/WB 流水线寄存器  ======================
 // ============================================================
     reg [31:0] memwb_alu_result;
@@ -457,7 +513,7 @@ module cpu_top (
             memwb_wb_sel     <= 2'b0;
         end else begin
             memwb_alu_result <= exmem_alu_result;
-            memwb_mem_rdata  <= mem_rdata;
+            memwb_mem_rdata  <= mem_rdata_fwd;  // 使用 store-to-load 前递后的数据
             memwb_pc_plus4   <= exmem_pc_plus4;
             memwb_rd         <= exmem_rd;
             memwb_reg_write  <= exmem_reg_write;
@@ -500,5 +556,16 @@ module cpu_top (
     assign dbg_ex_pc_target  = _dbg_ex_pc_target;
     assign dbg_stall         = _dbg_stall;
     assign dbg_flush         = _dbg_flush;
+
+    // ---- 通用寄存器直接引出 (层次路径读取寄存器堆) ----
+    (* mark_debug = "true" *) wire [31:0] _dbg_reg_x2 = u_regfile.regs[2];
+    (* mark_debug = "true" *) wire [31:0] _dbg_reg_x3 = u_regfile.regs[3];
+    (* mark_debug = "true" *) wire [31:0] _dbg_reg_x4 = u_regfile.regs[4];
+    (* mark_debug = "true" *) wire [31:0] _dbg_reg_x7 = u_regfile.regs[7];
+
+    assign dbg_reg_x2 = _dbg_reg_x2;
+    assign dbg_reg_x3 = _dbg_reg_x3;
+    assign dbg_reg_x4 = _dbg_reg_x4;
+    assign dbg_reg_x7 = _dbg_reg_x7;
 
 endmodule

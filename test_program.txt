@@ -29,8 +29,8 @@
 ##
 ## loop: (PC=0x10)
 ## 0x10  00610133   add   x2,  x2, x6   # sum += i  [EX-EX前递]
-## 0x14  00530313   addi  x6,  x6,  1   # i++       [EX-EX前递: x6]
-## 0x18  FE6096E3   bne   x1,  x6, loop # if x1!=x6 goto loop  (偏移=-20)
+## 0x14  00130313   addi  x6,  x6,  1   # i++       [EX-EX前递: x6]
+## 0x18  FE609CE3   bne   x1,  x6, loop # if x1!=x6 goto loop  (偏移=-8)
 ##                                        # 循环结束时 x2=1+2+...+10=55, x6=11
 ##
 ## 0x1C  00202023   sw    x2,  0(x0)    # mem[0] = 55
@@ -38,7 +38,7 @@
 ## 0x24  00018233   add   x4,  x3, x0   # x4 = x3  [MEM-EX前递]
 ## 0x28  0DEAD3B7   lui   x7,  0xDEAD   # x7 = 0xDEAD000 (结束标志)
 ## 0x2C  0000006F   jal   x0,  0        # 原地死循环
-##
+
 ## 期望结果:
 ##   x1  = 11
 ##   x2  = 55

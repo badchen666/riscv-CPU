@@ -15,24 +15,29 @@ module imem (
     output wire [31:0] instr,         // 读出的指令
 
     // ---- BRAM Port B Native 接口 (全部引出，在 Block Design 中连线) ----
-    output wire [9:0]  bram_addrb,    // → BRAM addrb
-    output wire        bram_clkb,     // → BRAM clkb
-    output wire        bram_enb,      // → BRAM enb   (常高)
-    output wire        bram_rstb,     // → BRAM rstb  (常低)
-    output wire [3:0]  bram_web,      // → BRAM web   (常0, 只读)
-    output wire [31:0] bram_dinb,     // → BRAM dinb  (常0, 只读)
-    input  wire [31:0] bram_doutb     // ← BRAM doutb
+    input wire [31:0] instr_addra,
+    input wire [31:0] instr_data,
+    input wire        instr_ena,
+    input wire        instr_wea
 );
-
+    wire [9:0] bram_addrb;
+    wire bram_enb;
+    wire [31:0] bram_doutb;
+    
     // 地址转换：字节地址 → 字地址
-    assign bram_addrb = addr[9:0];
-    assign bram_clkb  = clk;
-    assign bram_enb   = 1'b1;
-    assign bram_rstb  = 1'b0;
-    assign bram_web   = 4'b0000;
-    assign bram_dinb  = 32'b0;
-
-    // 指令输出
+    assign bram_addrb = addr[11:2];
+    assign bram_enb = 1'b1;  // 始终使能 Port B 读取指令
     assign instr = bram_doutb;
+
+    instr_ram instr_ram (
+        .clk   (clk),
+        .ena   (instr_ena),
+        .enb   (bram_enb),
+        .wea   (instr_wea),
+        .addra (instr_addra),
+        .addrb (bram_addrb),
+        .dina  (instr_data),
+        .doutb (bram_doutb)
+    );
 
 endmodule
