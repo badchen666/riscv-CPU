@@ -14,7 +14,7 @@ module  instr_ram (
 integer i;
 initial begin
         for (i = 0; i < 1024; i = i + 1) begin
-            ram[i] = 32'h00000013;
+            ram[i] = 32'h00000000;
         end
     end
 
